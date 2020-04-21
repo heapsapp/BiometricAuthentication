@@ -25,6 +25,8 @@
 
 import UIKit
 import LocalAuthentication
+import RxSwift
+import RxCocoa
 
 open class BioMetricAuthenticator: NSObject {
 
@@ -54,6 +56,22 @@ open class BioMetricAuthenticator: NSObject {
 
 public extension BioMetricAuthenticator {
     
+    // sets localization texts
+    class func setLocalizations(kBiometryNotAvailableReasonValue: String, kTouchIdAuthenticationReasonValue: String, kTouchIdPasscodeAuthenticationReasonValue: String, kSetPasscodeToUseTouchIDValue: String, kNoFingerprintEnrolledValue: String, kDefaultTouchIDAuthenticationFailedReasonValue: String, kFaceIdAuthenticationReasonValue: String, kFaceIdPasscodeAuthenticationReasonValue: String, kSetPasscodeToUseFaceIDValue: String, kNoFaceIdentityEnrolledValue: String, kDefaultFaceIDAuthenticationFailedReasonValue: String) {
+        
+        kBiometryNotAvailableReason = kBiometryNotAvailableReasonValue
+        kTouchIdAuthenticationReason = kTouchIdAuthenticationReasonValue
+        kTouchIdPasscodeAuthenticationReason = kTouchIdPasscodeAuthenticationReasonValue
+        kSetPasscodeToUseTouchID = kSetPasscodeToUseTouchIDValue
+        kNoFingerprintEnrolled = kNoFingerprintEnrolledValue
+        kDefaultTouchIDAuthenticationFailedReason = kDefaultTouchIDAuthenticationFailedReasonValue
+        kFaceIdAuthenticationReason = kFaceIdAuthenticationReasonValue
+        kFaceIdPasscodeAuthenticationReason = kFaceIdPasscodeAuthenticationReasonValue
+        kSetPasscodeToUseFaceID = kSetPasscodeToUseFaceIDValue
+        kNoFaceIdentityEnrolled = kNoFaceIdentityEnrolledValue
+        kDefaultFaceIDAuthenticationFailedReason = kDefaultFaceIDAuthenticationFailedReasonValue
+    }
+    
     /// checks if biometric authentication can be performed currently on the device.
     class func canAuthenticate() -> Bool {
         
@@ -67,7 +85,7 @@ public extension BioMetricAuthenticator {
     }
     
     /// Check for biometric authentication
-    class func authenticateWithBioMetrics(reason: String, fallbackTitle: String? = "", cancelTitle: String? = "", completion: @escaping (Result<Bool, AuthenticationError>) -> Void) {
+    class func authenticateWithBioMetrics(reason: String = "", fallbackTitle: String? = "", cancelTitle: String? = "") -> Observable<Result<Bool, AuthenticationError>> {
         
         // reason
         let reasonString = reason.isEmpty ? BioMetricAuthenticator.shared.defaultBiometricAuthenticationReason() : reason
@@ -76,7 +94,7 @@ public extension BioMetricAuthenticator {
         var context: LAContext!
         if BioMetricAuthenticator.shared.isReuseDurationSet() {
             context = BioMetricAuthenticator.shared.context
-        }else {
+        } else {
             context = LAContext()
         }
         context.localizedFallbackTitle = fallbackTitle
@@ -87,11 +105,11 @@ public extension BioMetricAuthenticator {
         }
         
         // authenticate
-        BioMetricAuthenticator.shared.evaluate(policy: .deviceOwnerAuthenticationWithBiometrics, with: context, reason: reasonString, completion: completion)
+        return BioMetricAuthenticator.shared.evaluate(policy: .deviceOwnerAuthenticationWithBiometrics, with: context, reason: reasonString)
     }
     
     /// Check for device passcode authentication
-    class func authenticateWithPasscode(reason: String, cancelTitle: String? = "", completion: @escaping (Result<Bool, AuthenticationError>) -> ()) {
+    class func authenticateWithPasscode(reason: String, cancelTitle: String? = "") -> Observable<Result<Bool, AuthenticationError>> {
         
         // reason
         let reasonString = reason.isEmpty ? BioMetricAuthenticator.shared.defaultPasscodeAuthenticationReason() : reason
@@ -105,10 +123,10 @@ public extension BioMetricAuthenticator {
         
         // authenticate
         if #available(iOS 9.0, *) {
-            BioMetricAuthenticator.shared.evaluate(policy: .deviceOwnerAuthentication, with: context, reason: reasonString, completion: completion)
+            return BioMetricAuthenticator.shared.evaluate(policy: .deviceOwnerAuthentication, with: context, reason: reasonString)
         } else {
             // Fallback on earlier versions
-            BioMetricAuthenticator.shared.evaluate(policy: .deviceOwnerAuthenticationWithBiometrics, with: context, reason: reasonString, completion: completion)
+            return BioMetricAuthenticator.shared.evaluate(policy: .deviceOwnerAuthenticationWithBiometrics, with: context, reason: reasonString)
         }
     }
     
@@ -149,6 +167,7 @@ public extension BioMetricAuthenticator {
     }
 }
 
+
 // MARK:- Private
 extension BioMetricAuthenticator {
 
@@ -171,17 +190,20 @@ extension BioMetricAuthenticator {
     }
     
     /// evaluate policy
-    private func evaluate(policy: LAPolicy, with context: LAContext, reason: String, completion: @escaping (Result<Bool, AuthenticationError>) -> ()) {
+    private func evaluate(policy: LAPolicy, with context: LAContext, reason: String) -> Observable<Result<Bool, AuthenticationError>> {
         
-        context.evaluatePolicy(policy, localizedReason: reason) { (success, err) in
-            DispatchQueue.main.async {
-                if success {
-                    completion(.success(true))
-                }else {
-                    let errorType = AuthenticationError.initWithError(err as! LAError)
-                    completion(.failure(errorType))
+        return Observable.create { observer -> Disposable in
+            context.evaluatePolicy(policy, localizedReason: reason) { (success, err) in
+                DispatchQueue.main.async {
+                    if success {
+                        observer.onNext(.success(true))
+                    } else {
+                        let errorType = AuthenticationError.initWithError(err as! LAError)
+                        observer.onNext(.failure(errorType))
+                    }
                 }
             }
+            return Disposables.create()
         }
     }
 }

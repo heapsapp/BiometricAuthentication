@@ -23,5 +23,8 @@ s.source_files = "BiometricAuthentication/**/*.swift"
 s.requires_arc = true
 s.swift_version = "5.0"
 
+s.dependency "RxSwift"
+s.dependency "RxCocoa"
+
 end
 
